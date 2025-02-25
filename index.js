@@ -10,6 +10,7 @@ const logger = morgan("tiny");
 
 // 创建 Express 应用实例
 const app = express();
+require('express-ws')(app);
 
 // 配置中间件
 app.use(express.urlencoded({ extended: false })); // 解析 URL 编码的请求体
@@ -27,30 +28,6 @@ app.get("/test", async (req, res) => {
     data: 5556
   })
 });
-// 更新计数路由
-// app.post("/api/count", async (req, res) => {
-//   const { action } = req.body; // 获取请求体中的 action 参数
-//   if (action === "inc") {
-//     await Counter.create(); // 如果 action 为 inc，创建新计数
-//   } else if (action === "clear") {
-//     await Counter.destroy({
-//       truncate: true, // 如果 action 为 clear，清空计数
-//     });
-//   }
-//   res.send({
-//     code: 0, // 返回成功状态码
-//     data: await Counter.count(), // 返回当前计数
-//   });
-// });
-
-// // 获取计数路由
-// app.get("/api/count", async (req, res) => {
-//   const result = await Counter.count(); // 获取当前计数
-//   res.send({
-//     code: 0, // 返回成功状态码
-//     data: result, // 返回计数结果
-//   });
-// });
 
 // 获取微信 Open ID 路由
 app.get("/api/wx_openid", async (req, res) => {
@@ -58,6 +35,11 @@ app.get("/api/wx_openid", async (req, res) => {
     res.send(req.headers["x-wx-openid"]); // 返回微信 Open ID
   }
 });
+
+// 引入 WebSocket 处理函数
+const wsHandler = require('./wsHandler');
+console.log('wsHandler', wsHandler)
+wsHandler(app);
 
 // 设置端口号，优先使用环境变量中的 PORT，否则使用 80
 const port = process.env.PORT || 80;
