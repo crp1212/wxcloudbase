@@ -1,5 +1,16 @@
 const { v4: uuidv4 } = require('uuid');
+const { shuffleArray } = require('./utils/common')
 const wsHandler = (app) => {
+  function genMessage (userId, content) {
+    const result = {
+      id: uuidv4(),
+      userId,
+      content: msgData.content.trim(),
+      timestamp: Date.now(),
+      
+    }
+    return result
+  }
   class RoomManager {
     constructor() {
       this.rooms = new Map(); // roomId -> Room
@@ -8,9 +19,15 @@ const wsHandler = (app) => {
   
     getOrCreateRoom(roomId) {
       if (!this.rooms.has(roomId)) {
+        const dataList = shuffleArray([10, 20, 30, 40, 50, 0, 0, 0, 0, 0])
         this.rooms.set(roomId, {
           users: new Map(), // userId -> ws
-          history: [],
+          history: [
+            {
+              type: 'init',
+              data: dataList
+            }
+          ],
           cleanupTimer: null,
         });
       }
@@ -77,12 +94,7 @@ const wsHandler = (app) => {
         }
   
         // 构造完整消息
-        const chatMessage = {
-          id: uuidv4(),
-          userId,
-          content: msgData.content.trim(),
-          timestamp: Date.now()
-        };
+        const chatMessage = genMessage()
   
         // 保存到历史
         roomManager.addHistory(roomId, chatMessage);
