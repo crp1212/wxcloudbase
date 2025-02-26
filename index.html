@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WebSocket Chat</title>
 </head>
+
 <body>
   <h1>WebSocket Chat</h1>
   <div id="chat">
@@ -14,53 +16,50 @@
   </div>
 
   <script>
-    const roomId = 'room1'; // 假设的房间ID
-    let clientId = localStorage.getItem('clientId');
-    if (!clientId) {
-      clientId = new Date().getTime().toString();
-      localStorage.setItem('clientId', clientId);
-    }
-
-    const ws = new WebSocket(`ws://${window.location.host}/ws/${roomId}`);
+    const ws = new WebSocket('ws://localhost/chat?roomId=ROOM123&userId=USER456');
 
     ws.onopen = () => {
-      console.log('Connected to server');
-      ws.send(JSON.stringify({ type: 'identify', clientId }));
+      console.log('Connected to chat server');
     };
 
-    ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      if (message.type === 'history') {
-        message.history.forEach((msg) => {
-          const messageElement = document.createElement('div');
-          messageElement.textContent = `${msg.user} (${msg.timestamp}): ${msg.content}`;
-          document.getElementById('messages').appendChild(messageElement);
-        });
-      } else {
-        const messageElement = document.createElement('div');
-        messageElement.textContent = `${message.user} (${message.timestamp}): ${message.content}`;
-        document.getElementById('messages').appendChild(messageElement);
+    ws.onmessage = (e) => {
+      const message = JSON.parse(e.data);
+      switch (message.type) {
+        case 'history':
+          // 处理历史消息
+          message.data.forEach(handleMessage);
+          break;
+        case 'message':
+          // 处理实时消息
+          handleMessage(message.data);
+          break;
       }
     };
 
-    ws.onclose = () => {
-      console.log('Disconnected from server');
-    };
+    function handleMessage(msg) {
+      console.log('msg', msg)
+    }
 
+    function sendMessage(content) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ content }));
+      }
+    }
+
+    // 通用断开重连逻辑
+    function setupReconnect() {
+      const reconnect = () => {
+        if (ws.readyState !== WebSocket.OPEN) {
+          // 重新连接逻辑
+        }
+      };
+      ws.onclose = reconnect;
+      ws.onerror = reconnect;
+    }
     document.getElementById('sendButton').addEventListener('click', () => {
-      const messageInput = document.getElementById('messageInput');
-      const message = messageInput.value;
-      if (message) {
-        const messageObj = {
-          type: 'send',
-          timestamp: new Date().toISOString(),
-          user: clientId,
-          content: message
-        };
-        ws.send(JSON.stringify(messageObj));
-        messageInput.value = '';
-      }
-    });
+      sendMessage(document.getElementById('messageInput').value)
+    })
   </script>
 </body>
+
 </html>

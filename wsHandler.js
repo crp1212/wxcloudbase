@@ -1,48 +1,118 @@
+const { v4: uuidv4 } = require('uuid');
 const wsHandler = (app) => {
-  const messageHistory = [];
-  const chatRooms = {}
-
-  app.ws('/ws/:roomId', function (ws, req) {
-    const roomId = req.params.roomId;
-    let openid = req.headers['x-wx-openid'] // 从header中获取用户openid信息
-
-    if (openid == null) { // 如果不存在则不是微信侧发起的
-      openid = new Date().getTime() // 使用时间戳代替
-      ws.close()
-      return
+  class RoomManager {
+    constructor() {
+      this.rooms = new Map(); // roomId -> Room
+      this.historyLimit = 100; // 历史记录最大条数
     }
-    console.log('openid', openid)
-
-    if (!chatRooms[roomId]) {
-      chatRooms[roomId] = [];
-    }
-
-    chatRooms[roomId].push(ws);
-
-    // 发送历史消息给新连接的客户端
-    ws.send(JSON.stringify(messageHistory));
-
-    ws.on('message', function (msg) {
-      console.log('收到消息：', msg);
-      const message = {
-        type: 'receive',
-        timestamp: new Date().toISOString(),
-        user: openid,
-        content: msg
-      };
-      messageHistory.push(message);
-      chatRooms[roomId].forEach(client => {
-        if (client.readyState === ws.OPEN) {
-          client.send(JSON.stringify(message));
-        }
-      });
-    });
-
-    ws.on('close', function () {
-      const index = chatRooms[roomId].indexOf(ws);
-      if (index > -1) {
-        chatRooms[roomId].splice(index, 1);
+  
+    getOrCreateRoom(roomId) {
+      if (!this.rooms.has(roomId)) {
+        this.rooms.set(roomId, {
+          users: new Map(), // userId -> ws
+          history: [],
+          cleanupTimer: null,
+        });
       }
+      return this.rooms.get(roomId);
+    }
+  
+    addHistory(roomId, message) {
+      const room = this.getOrCreateRoom(roomId);
+      room.history.push(message);
+      // 保持历史记录不超过限制
+      if (room.history.length > this.historyLimit) {
+        room.history.shift();
+      }
+    }
+  
+    scheduleCleanup(roomId) {
+      const room = this.rooms.get(roomId);
+      if (room && room.users.size === 0) {
+        room.cleanupTimer = setTimeout(() => {
+          this.rooms.delete(roomId);
+          console.log(`Room ${roomId} cleaned up`);
+        }, 5 * 60 * 1000); // 5分钟
+      }
+    }
+  
+    cancelCleanup(roomId) {
+      const room = this.rooms.get(roomId);
+      if (room && room.cleanupTimer) {
+        clearTimeout(room.cleanupTimer);
+        room.cleanupTimer = null;
+      }
+    }
+  }
+  
+  const roomManager = new RoomManager();
+
+  app.ws('/chat', (ws, req) => {
+    const { roomId, userId } = req.query;
+    if (!roomId || !userId) {
+      ws.close(4001, 'Missing roomId or userId');
+      return;
+    }
+  
+    const room = roomManager.getOrCreateRoom(roomId);
+    
+    // 取消清理定时
+    roomManager.cancelCleanup(roomId);
+    
+    // 保存用户连接
+    room.users.set(userId, ws);
+    console.log(`User ${userId} joined room ${roomId}`);
+  
+    // 发送历史记录
+    ws.send(JSON.stringify({
+      type: 'history',
+      data: room.history
+    }));
+  
+    ws.on('message', (message) => {
+      try {
+        const msgData = JSON.parse(message);
+        if (!msgData.content || typeof msgData.content !== 'string') {
+          return;
+        }
+  
+        // 构造完整消息
+        const chatMessage = {
+          id: uuidv4(),
+          userId,
+          content: msgData.content.trim(),
+          timestamp: Date.now()
+        };
+  
+        // 保存到历史
+        roomManager.addHistory(roomId, chatMessage);
+  
+        // 广播给房间内其他用户
+        room.users.forEach((userWs, id) => {
+          if (id !== userId && userWs.readyState === 1) { // 1 = OPEN
+            userWs.send(JSON.stringify({
+              type: 'message',
+              data: chatMessage
+            }));
+          }
+        });
+      } catch (e) {
+        console.error('Message processing error:', e);
+      }
+    });
+  
+    ws.on('close', () => {
+      room.users.delete(userId);
+      console.log(`User ${userId} left room ${roomId}`);
+  
+      // 房间空置时启动清理定时
+      if (room.users.size === 0) {
+        roomManager.scheduleCleanup(roomId);
+      }
+    });
+  
+    ws.on('error', (err) => {
+      console.error('WebSocket error:', err);
     });
   });
 };

@@ -3,6 +3,8 @@ const path = require("path"); // 处理文件路径
 const express = require("express"); // Express 框架
 const cors = require("cors"); // 处理跨域请求
 const morgan = require("morgan"); // HTTP 请求日志记录
+// 引入 WebSocket 处理函数
+const wsHandler = require('./wsHandler');
 // const { init: initDB, Counter } = require("./db"); // 数据库初始化及模型
 
 // 创建 morgan 日志记录器
@@ -36,9 +38,7 @@ app.get("/api/wx_openid", async (req, res) => {
   }
 });
 
-// 引入 WebSocket 处理函数
-const wsHandler = require('./wsHandler');
-console.log('wsHandler', wsHandler)
+
 wsHandler(app);
 
 // 设置端口号，优先使用环境变量中的 PORT，否则使用 80
